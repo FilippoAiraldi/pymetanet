@@ -9,8 +9,9 @@ engine = engines.use("numpy", var_type="randn")
 
 class TestNetwork(unittest.TestCase):
     def assertAtLeastOneRegexMatch(self, pattern: str, strings: Iterable[str]):
+        escaped_pattern = re.escape(pattern)
         for string in strings:
-            if re.match(pattern, string):
+            if re.match(escaped_pattern, string):
                 return
         raise self.failureException(f"no string matches pattern: {pattern}")
 
@@ -225,8 +226,8 @@ class TestNetwork(unittest.TestCase):
         ok, msgs = net.is_valid(raises=False)
         self.assertFalse(ok)
         self.assertAtLeastOneRegexMatch(
-            r"Expected node N2 to have no entering links, as it is connected "
-            r"to origin O \(only ramps support entering links\).",
+            "Expected node N2 to have no entering links, as it is connected "
+            "to origin O (only ramps support entering links).",
             msgs,
         )
 
@@ -281,8 +282,8 @@ class TestNetwork(unittest.TestCase):
         ok, msgs = net.is_valid(raises=False)
         self.assertFalse(ok)
         self.assertAtLeastOneRegexMatch(
-            "Expected node N1 to have no exiting links, as it is connected "
-            "to destination D.",
+            "Expected node N1 to have no exiting links, as it is connected to "
+            "destination D (only off-ramps support exiting links).",
             msgs,
         )
 
