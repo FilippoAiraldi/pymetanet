@@ -1,5 +1,5 @@
 from collections.abc import Collection
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 from sym_metanet.blocks.base import ElementWithVars
 from sym_metanet.engines.core import EngineBase, get_current_engine
@@ -126,7 +126,7 @@ class OffRampDestination(Destination[VarType]):
     """
 
     def __init__(self,
-                 turnrate: Union[VarType, float, list] = 1.0,
+                 turnrate: Union[VarType, float] = 1.0,
                  name: Optional[str] = None,
                  ) -> None:
         """Initializes no variable in the ideal destination."""
