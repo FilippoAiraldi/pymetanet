@@ -118,23 +118,30 @@ class CongestedDestination(Destination[VarType]):
         )
 
 
-class OffRampDestination(Destination[VarType]):
-    """
-    off-ramp destination
-    Parameters
-    ----------
-    """
+class OffRamp(Destination[VarType]):
+    """Unmetered off-ramp destination. Incoming vehicles can leave the highway via this
+    off-ramp or continue via the downstream links, according to the turn rate of these
+    elements.
 
-    def __init__(self,
-                 turnrate: Union[VarType, float] = 1.0,
-                 name: Optional[str] = None,
-                 ) -> None:
+    Note: if this destination is attached to a node with no other exiting links, it will
+    act as an uncongested destination `Destination`."""
+
+    def __init__(
+        self,
+        turnrate: Union[VarType, float] = 1.0,
+        name: Optional[str] = None,
+    ) -> None:
         """Initializes no variable in the ideal destination."""
         super().__init__(name)
         self.turnrate = turnrate
 
-
-    def get_flow(self, net: "Network", turnrate_link: float, engine: Optional[EngineBase] = None, **kwargs) -> VarType:
+    def get_flow(
+        self,
+        net: "Network",
+        turnrate_link: float,
+        engine: Optional[EngineBase] = None,
+        **_,
+    ) -> VarType:
         """Computes the (upstream) flow induced by the off-ramp destination.
 
         Parameters
@@ -153,4 +160,6 @@ class OffRampDestination(Destination[VarType]):
             engine = get_current_engine()
         link_up = self._get_entering_link(net)
         link_up_flow = link_up.get_flow(engine=engine)[-1]
-        return engine.destinations.get_offramp_flow(self.turnrate, turnrate_link, link_up_flow)
+        return engine.destinations.get_offramp_flow(
+            self.turnrate, turnrate_link, link_up_flow
+        )

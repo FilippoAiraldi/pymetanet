@@ -74,7 +74,6 @@ class Node(ElementBase):
                 )
             return engine.nodes.get_downstream_density(rho_firsts)
 
-
     def get_upstream_speed_and_flow(
         self,
         net: "Network",
@@ -131,7 +130,9 @@ class Node(ElementBase):
                 q += q_o  # type: ignore[assignment,operator]
             if self in net.destinations_by_node:
                 destination = net.destinations_by_node[self]
-                q_destination = destination.get_flow(net, turnrate_link, engine=engine, **kwargs)
+                q_destination = destination.get_flow(
+                    net, turnrate_link, engine=engine, **kwargs
+                )
                 q = q - q_destination
         else:
             v_last = []

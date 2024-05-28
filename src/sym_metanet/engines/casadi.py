@@ -188,8 +188,11 @@ class DestinationsEngine(DestinationsEngineBase, Generic[VarType]):
         return cs.fmax(cs.fmin(rho_last, rho_crit), rho_destination)
 
     @staticmethod
-    def get_offramp_flow(turnrate: VarType, turnrate_link: VarType, in_flow: VarType) -> VarType:
-        return turnrate/(turnrate + turnrate_link) * in_flow
+    def get_offramp_flow(
+        turnrate: VarType, turnrate_link: VarType, in_flow: VarType
+    ) -> VarType:
+        return turnrate / (turnrate + turnrate_link) * in_flow
+
 
 class Engine(EngineBase, Generic[VarType]):
     """Symbolic engine implemented with the CasADi framework"""

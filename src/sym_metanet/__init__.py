@@ -4,7 +4,6 @@ __all__ = [
     "engines",
     "CongestedDestination",
     "Destination",
-    "OffRampDestination",
     "EngineNotFoundWarning",
     "EngineNotFoundError",
     "InvalidNetworkError",
@@ -14,6 +13,7 @@ __all__ = [
     "MeteredOnRamp",
     "Network",
     "Node",
+    "OffRamp",
     "Origin",
     "SimplifiedLinkWithVsl",
     "SimplifiedMeteredOnRamp",
@@ -40,7 +40,7 @@ if _notfound:
     warnings.warn("No available symbolic engine found.", EngineNotFoundWarning)
 del _notfound, _engine
 
-from sym_metanet.blocks.destinations import CongestedDestination, Destination
+from sym_metanet.blocks.destinations import CongestedDestination, Destination, OffRamp
 from sym_metanet.blocks.links import Link, LinkWithVsl, SimplifiedLinkWithVsl
 from sym_metanet.blocks.nodes import Node
 from sym_metanet.blocks.origins import (
