@@ -29,10 +29,13 @@ class NodesEngine(NodesEngineBase, Generic[VarType]):
         beta: VarType,
         betas: VarType,
         q_orig: Optional[VarType] = None,
+        q_dest: Optional[VarType] = None,
     ) -> VarType:
         Q = cs.sum1(q_lasts)
         if q_orig is not None:
             Q += q_orig
+        if q_dest is not None:
+            Q -= q_dest
         return (beta / cs.sum1(betas)) * Q
 
     @staticmethod
@@ -186,12 +189,6 @@ class DestinationsEngine(DestinationsEngineBase, Generic[VarType]):
         rho_last: VarType, rho_destination: VarType, rho_crit: VarType
     ) -> VarType:
         return cs.fmax(cs.fmin(rho_last, rho_crit), rho_destination)
-
-    @staticmethod
-    def get_offramp_flow(
-        turnrate: VarType, turnrate_link: VarType, in_flow: VarType
-    ) -> VarType:
-        return turnrate / (turnrate + turnrate_link) * in_flow
 
 
 class Engine(EngineBase, Generic[VarType]):

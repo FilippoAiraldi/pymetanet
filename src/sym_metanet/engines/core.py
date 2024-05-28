@@ -21,10 +21,12 @@ class NodesEngineBase(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_upstream_flow(q_lasts, beta, betas, q_orig=0):
+    def get_upstream_flow(q_lasts, beta, betas, q_orig=None, q_dest=None):
         """Computes the upstream flow from a node to a given exiting link, where the
         node can have multiple entering links and multiple exiting links, according to
-        [1, Section 3.2.2].
+        [1, Section 3.2.2]. Moreover, this node could be attached to an origin or a
+        destination, which is accounted for by the optional parameters `q_orig` and
+        `beta_dest`, respectively.
 
         Parameters
         ----------
@@ -35,7 +37,9 @@ class NodesEngineBase(ABC):
         betas
             Turnrates of all the exiting links (including this link).
         q_orig : optional
-            An optional upstream flow from an origin.
+            Optional upstream flow from an origin.
+        q_dest : optional
+            Optional downstream flow to a off-ramp destination.
 
         Returns
         -------

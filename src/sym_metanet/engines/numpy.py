@@ -21,10 +21,13 @@ class NodesEngine(NodesEngineBase):
         beta: np.ndarray,
         betas: np.ndarray,
         q_orig: Optional[np.ndarray] = None,
+        q_dest: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         Q = np.sum(q_lasts, 0)
         if q_orig is not None:
             Q += q_orig
+        if q_dest is not None:
+            Q -= q_dest
         return (beta / np.sum(betas, 0)) * Q
 
     @staticmethod
