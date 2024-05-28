@@ -458,14 +458,13 @@ class Network(ElementBase):
                     raise InvalidNetworkError(msgs[-1])
             if n_in == 0 and ORIGINENTRY not in nodedata:
                 msgs.append(
-                    f"Node {node.name} has neither any entering links nor an " "origin."
+                    f"Node {node.name} has neither any entering links nor an origin."
                 )
                 if raises:
                     raise InvalidNetworkError(msgs[-1])
             if n_out == 0 and DESTINATIONENTRY not in nodedata:
                 msgs.append(
-                    f"Node {node.name} has neither any exiting links nor a "
-                    "destination."
+                    f"Node {node.name} has neither any exiting links nor a destination."
                 )
                 if raises:
                     raise InvalidNetworkError(msgs[-1])
