@@ -4,6 +4,7 @@ __all__ = [
     "engines",
     "CongestedDestination",
     "Destination",
+    "OffRampDestination",
     "EngineNotFoundWarning",
     "EngineNotFoundError",
     "InvalidNetworkError",

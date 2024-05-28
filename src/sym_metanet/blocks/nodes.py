@@ -46,20 +46,34 @@ class Node(ElementBase):
         # following the link entering this node, this node can only be a
         # destination or have multiple exiting links
         if self in net.destinations_by_node:
-            return net.destinations_by_node[self].get_density(
+            denstiy_destination = net.destinations_by_node[self].get_density(
                 net, engine=engine, **kwargs
             )
+        else:
+            denstiy_destination = None
 
         # if no destination, then there must be 1 or more exiting links
         links_down: Collection[tuple["Node", "Node", "Link[Variable]"]] = net.out_links(
             self
         )
-        if len(links_down) == 1:
+        if len(links_down) == 0:
+            return denstiy_destination
+        elif len(links_down) == 1 and denstiy_destination is None:
             return first(links_down)[-1].states["rho"][0]
-        rho_firsts = engine.vcat(
-            *(dlink.states["rho"][0] for _, _, dlink in links_down)
-        )
-        return engine.nodes.get_downstream_density(rho_firsts)
+        else:
+            if denstiy_destination is not None:
+                # if there is a destination, and other 1 or more exiting links
+                rho_firsts = engine.vcat(
+                    *(dlink.states["rho"][0] for _, _, dlink in links_down)
+                )
+                rho_firsts = engine.vcat(rho_firsts, denstiy_destination)
+
+            else:
+                rho_firsts = engine.vcat(
+                    *(dlink.states["rho"][0] for _, _, dlink in links_down)
+                )
+            return engine.nodes.get_downstream_density(rho_firsts)
+
 
     def get_upstream_speed_and_flow(
         self,
@@ -112,8 +126,13 @@ class Node(ElementBase):
             link_up = next(iter(links_up))[-1]
             v = link_up.states["v"][-1]
             q = link_up.get_flow(engine)[-1]
+            turnrate_link = link_up.turnrate
             if q_o is not None:
                 q += q_o  # type: ignore[assignment,operator]
+            if self in net.destinations_by_node:
+                destination = net.destinations_by_node[self]
+                q_destination = destination.get_flow(net, turnrate_link, engine=engine, **kwargs)
+                q = q - q_destination
         else:
             v_last = []
             q_last = []

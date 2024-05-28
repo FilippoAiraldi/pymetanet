@@ -116,3 +116,41 @@ class CongestedDestination(Destination[VarType]):
         return engine.destinations.get_congested_downstream_density(
             link_up.states["rho"][-1], self.disturbances["d"], link_up.rho_crit
         )
+
+
+class OffRampDestination(Destination[VarType]):
+    """
+    off-ramp destination
+    Parameters
+    ----------
+    """
+
+    def __init__(self,
+                 turnrate: Union[VarType, float, list] = 1.0,
+                 name: Optional[str] = None,
+                 ) -> None:
+        """Initializes no variable in the ideal destination."""
+        super().__init__(name)
+        self.turnrate = turnrate
+
+
+    def get_flow(self, net: "Network", turnrate_link: float, engine: Optional[EngineBase] = None, **kwargs) -> VarType:
+        """Computes the (upstream) flow induced by the off-ramp destination.
+
+        Parameters
+        ----------
+        net : Network
+            The network this destination belongs to.
+        engine : EngineBase, optional
+            The engine to be used. If `None`, the current engine is used.
+
+        Returns
+        -------
+        symbolic variable
+            The destination's upstream flow.
+        """
+        if engine is None:
+            engine = get_current_engine()
+        link_up = self._get_entering_link(net)
+        link_up_flow = link_up.get_flow(engine=engine)[-1]
+        return engine.destinations.get_offramp_flow(self.turnrate, turnrate_link, link_up_flow)
