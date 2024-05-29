@@ -12,6 +12,7 @@ from sym_metanet import (
     MeteredOnRamp,
     Network,
     Node,
+    OffRamp,
     SimplifiedMeteredOnRamp,
     engines,
 )
@@ -21,7 +22,9 @@ from sym_metanet.errors import EngineNotFoundError
 from sym_metanet.util.funcs import first
 
 
-def get_net(sym_type: Literal["MX", "SX"], link_with_ramp: int = 2):
+def get_net(
+    sym_type: Literal["MX", "SX"], link_with_ramp: int = 2, offramp: bool = False
+) -> tuple[Network, dict[str, Union[cs.SX, cs.MX]], dict[str, float]]:
     assert link_with_ramp in {1, 2}
     XX: Union[type[cs.SX], type[cs.MX]] = getattr(cs, sym_type)
     L = 1
@@ -40,7 +43,6 @@ def get_net(sym_type: Literal["MX", "SX"], link_with_ramp: int = 2):
     N2 = Node(name="N2")
     N3 = Node(name="N3")
     O1 = MeteredOnRamp(C[0], name="O1")
-    O2 = SimplifiedMeteredOnRamp(C[1], name="O2")
     D1 = CongestedDestination(name="D1")
     if link_with_ramp == 1:
         L1 = Link(1, lanes, L, rho_max, rho_crit_sym, v_free_sym, a_sym, name="L1")
@@ -48,11 +50,15 @@ def get_net(sym_type: Literal["MX", "SX"], link_with_ramp: int = 2):
     else:
         L1 = Link(2, lanes, L, rho_max, rho_crit_sym, v_free_sym, a_sym, name="L1")
         L2 = Link(1, lanes, L, rho_max, rho_crit_sym, v_free_sym, a_sym, name="L2")
-    net = (
-        Network(name="A1")
-        .add_path(origin=O1, path=(N1, L1, N2, L2, N3), destination=D1)
-        .add_origin(O2, N2)
+    net = Network(name="A1").add_path(
+        origin=O1, path=(N1, L1, N2, L2, N3), destination=D1
     )
+    if not offramp:
+        O2 = SimplifiedMeteredOnRamp(C[1], name="O2")
+        net.add_origin(O2, N2)
+    else:
+        D2 = OffRamp(turnrate=0.5, name="D2")
+        net.add_destination(D2, N2)
     sym_pars = {"rho_crit": rho_crit_sym, "a": a_sym, "v_free": v_free_sym}
     others = {
         "L": L,
@@ -191,7 +197,8 @@ class TestCasadiEngine(unittest.TestCase):
         )
         self.assertIn("rho", F.name_in())
         self.assertFalse(F.get_free())
-        self.assertEqual(len(F(30, 80, 5, 1, 250, 500, 1)), 5)
+        self.assertEqual(F.n_in(), 7)
+        self.assertEqual(F.n_out(), 5)
 
     @parameterized.expand([(1,), (2,)])
     def test_to_function__numerically_works(self, link_with_ramp: int):
@@ -250,6 +257,23 @@ class TestCasadiEngine(unittest.TestCase):
                     rtol=1e-6,
                     err_msg=f"{name} dissimilar (iter {i})",
                 )
+
+    def test_to_function__with_offramp__includes_offramp_flow(self):
+        net, sym_pars, other_pars = get_net(self.sym_type, offramp=True)
+        engine = engines.use("casadi", sym_type=self.sym_type)
+        net.is_valid(raises=True)
+        net.step(engine=engine, **other_pars)
+        F = metanet.engine.to_function(
+            net=net,
+            **other_pars,
+            parameters=sym_pars,
+            more_out=True,
+            compact=1,
+        )
+        self.assertIn("q_d", F.name_out())
+        self.assertFalse(F.get_free())
+        self.assertEqual(F.n_in(), 6)
+        self.assertEqual(F.n_out(), 6)
 
 
 class TestCasadiVsNumpyEngine(unittest.TestCase):
