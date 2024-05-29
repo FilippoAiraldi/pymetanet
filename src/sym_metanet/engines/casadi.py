@@ -266,7 +266,8 @@ class Engine(EngineBase, Generic[VarType]):
             aggregated in a single vector each.
 
         more_out : bool, optional
-            Includes flows of links and origins in the output. By default `False`.
+            Includes flows of links, origins and destinations (if any) in the output. By
+            default `False`.
         parameters : dict[str, casadi.SX or MX], optional
             Symbolic network parameters to be included in the function, by default None.
         **other_parameters
@@ -482,11 +483,11 @@ def _add_flows_to_outputs(
 ) -> None:
     """Internal utility to add even more outputs for `casadi.Function`."""
 
-    # add link and origin flows (q, q_o) to output
+    # add link flows (q), origin flows (q_o) and offramp flows (q_d) to output
     names_link: list[str] = []
     flows_link: list[VarType] = []
     names_origins, flows_origins = [], []
-    link: "Link[VarType]"
+    names_offramps, flows_offramps = [], []
     for _, _, link in net.links:
         names_link.append(f"q_{link.name}")
         flows_link.append(link.get_flow(engine))
@@ -495,16 +496,33 @@ def _add_flows_to_outputs(
         flows_origins.append(
             origin.get_flow(net, engine=engine, **parameters, **other_parameters)
         )
+    for destination in net.destinations:
+        if hasattr(destination, "get_flow"):
+            names_offramps.append(f"q_d_{destination.name}")
+            flows_offramps.append(
+                destination.get_flow(
+                    net, engine=engine, **parameters, **other_parameters
+                )
+            )
 
     if compact > 0:
         names_link = ["q"]
         flows_link = [cs.vcat(flows_link)]
-        names_origins = ["q_o"]
-        flows_origins = [cs.vcat(flows_origins)]
+        if names_origins:
+            names_origins = ["q_o"]
+            flows_origins = [cs.vcat(flows_origins)]
+        else:
+            names_origins, flows_origins = [], []
+        if names_offramps:
+            names_offramps = ["q_d"]
+            flows_offramps = [cs.vcat(flows_offramps)]
+        else:
+            names_offramps, flows_offramps = [], []
     if compact > 1:
         names_link = ["q"]
         flows_link = [cs.vertcat(flows_link[0], flows_origins[0])]
         names_origins, flows_origins = [], []
+        names_offramps, flows_offramps = [], []
 
-    names_out.extend(names_link + names_origins)
-    args_out.extend(flows_link + flows_origins)
+    names_out.extend(names_link + names_origins + names_offramps)
+    args_out.extend(flows_link + flows_origins + flows_offramps)
