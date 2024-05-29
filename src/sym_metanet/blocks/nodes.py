@@ -1,4 +1,3 @@
-from collections.abc import Collection
 from typing import TYPE_CHECKING, Optional
 
 from sym_metanet.blocks.base import ElementBase
@@ -40,39 +39,37 @@ class Node(ElementBase):
         symbolic variable
             Returns the (virtual) downstream density.
         """
+        # the node can have 0 or more exiting links, as well as a destination. If the
+        # destination is final (i.e., there are no exiting links), then the downstream
+        # density is dictated only by the destination. Otherwise, the destination must
+        # be an off-ramp, which is regarded as an additional link, and the downstream
+        # density is computed via the densities of the exiting links and the off-ramp.
         if engine is None:
             engine = get_current_engine()
 
-        # following the link entering this node, this node can only be a
-        # destination or have multiple exiting links
-        if self in net.destinations_by_node:
-            denstiy_destination = net.destinations_by_node[self].get_density(
-                net, engine=engine, **kwargs
-            )
-        else:
-            denstiy_destination = None
-
-        # if no destination, then there must be 1 or more exiting links
-        links_down: Collection[tuple["Node", "Node", "Link[Variable]"]] = net.out_links(
-            self
+        # first, grab the density of the destination, if any
+        density_dest = (
+            net.destinations_by_node[self].get_density(net, engine=engine, **kwargs)
+            if self in net.destinations_by_node
+            else None
         )
-        if len(links_down) == 0:
-            return denstiy_destination
-        elif len(links_down) == 1 and denstiy_destination is None:
+
+        # then, process the exiting links
+        links_down = net.out_links(self)
+        n_down = len(links_down)
+        if n_down == 0:
+            # no exiting link, only a destination (which must be final)
+            assert density_dest is not None, "No exiting links or destination!"
+            return density_dest
+        elif n_down == 1 and density_dest is None:
+            # if only one exiting link and no destination, simply return link's density
             return first(links_down)[-1].states["rho"][0]
         else:
-            if denstiy_destination is not None:
-                # if there is a destination, and other 1 or more exiting links
-                rho_firsts = engine.vcat(
-                    *(dlink.states["rho"][0] for _, _, dlink in links_down)
-                )
-                rho_firsts = engine.vcat(rho_firsts, denstiy_destination)
-
-            else:
-                rho_firsts = engine.vcat(
-                    *(dlink.states["rho"][0] for _, _, dlink in links_down)
-                )
-            return engine.nodes.get_downstream_density(rho_firsts)
+            # 1 or more exiting links and a destination, so combine their densities
+            rho_firsts = [dlink.states["rho"][0] for _, _, dlink in links_down]
+            if density_dest is not None:
+                rho_firsts.append(density_dest)
+            return engine.nodes.get_downstream_density(engine.vcat(*rho_firsts))
 
     def get_upstream_speed_and_flow(
         self,
