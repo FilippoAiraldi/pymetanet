@@ -1,5 +1,4 @@
-from collections.abc import Collection
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 from sym_metanet.blocks.base import ElementWithVars
 from sym_metanet.engines.core import EngineBase, get_current_engine
@@ -8,7 +7,6 @@ from sym_metanet.util.types import VarType
 
 if TYPE_CHECKING:
     from sym_metanet.blocks.links import Link
-    from sym_metanet.blocks.nodes import Node
     from sym_metanet.network import Network
 
 
@@ -48,9 +46,7 @@ class Destination(ElementWithVars[VarType]):
     def _get_entering_link(self, net: "Network") -> "Link[VarType]":
         """Internal utility to fetch the link entering this destination (can only be
         one)."""
-        links_up: Collection[tuple["Node", "Node", "Link[VarType]"]] = net.in_links(
-            net.destinations[self]  # type: ignore[index]
-        )
+        links_up = net.in_links(net.destinations[self])
         assert (
             len(links_up) == 1
         ), "Internal error. Only one link can enter a destination."
@@ -116,3 +112,74 @@ class CongestedDestination(Destination[VarType]):
         return engine.destinations.get_congested_downstream_density(
             link_up.states["rho"][-1], self.disturbances["d"], link_up.rho_crit
         )
+
+
+class OffRamp(Destination[VarType]):
+    """Unmetered off-ramp destination. Incoming vehicles can leave the highway via this
+    off-ramp or continue via the downstream links, according to the turn rate of these
+    elements.
+
+    Note: if this destination is attached to a node with no other exiting links, it will
+    act as an uncongested destination `Destination`."""
+
+    def __init__(
+        self,
+        turnrate: Union[VarType, float] = 1.0,
+        name: Optional[str] = None,
+    ) -> None:
+        """Initializes no variable in the ideal destination."""
+        super().__init__(name)
+        self.turnrate = turnrate
+
+    def get_flow(
+        self,
+        net: "Network",
+        engine: Optional[EngineBase] = None,
+        q_up: Optional[VarType] = None,
+        q_orig: Optional[VarType] = None,
+        betas_down: Optional[VarType] = None,
+        **kwargs,
+    ) -> VarType:
+        """Computes the flow exiting the highway via the off-ramp.
+
+        Parameters
+        ----------
+        net : Network
+            The network this off-ramp belongs to.
+        engine : EngineBase, optional
+            The engine to be used. If `None`, the current engine is used.
+        q_up : var type, optional
+            Flows of the entering link, by default `None`, in which case it is computed
+            automatically.
+        q_orig : var type, optional
+            Flows of the origin (if any), by default `None`, in which case it is
+            computed automatically.
+        betas_down : var type, optional
+            Turn rates of the downstream links, by default `None`, in which case it is
+            computed automatically.
+
+        Returns
+        -------
+        var type
+            The flow exiting the highway via the off-ramp.
+        """
+        if engine is None:
+            engine = get_current_engine()
+
+        # if not passed, get the upstream flow from the entering link and origin, if any
+        node = net.destinations[self]
+        if q_up is None:
+            link_up = self._get_entering_link(net)
+            q_up = link_up.get_flow(engine, **kwargs)[-1]
+        if q_orig is None and node in net.origins_by_node:
+            origin = net.origins_by_node[node]
+            q_orig = origin.get_flow(net, engine=engine, **kwargs)
+
+        # if not passed, compute the fraction of upstream flow exiting the highway via
+        # this off-ramp
+        if betas_down is None:
+            links_down = net.out_links(node)
+            betas = engine.vcat(*(l.turnrate for _, _, l in links_down), self.turnrate)
+        else:
+            betas = engine.vcat(betas_down, self.turnrate)
+        return engine.nodes.get_upstream_flow(q_up, self.turnrate, betas, q_orig)

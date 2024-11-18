@@ -6,7 +6,7 @@ from typing import Optional, Union
 import networkx as nx
 
 from sym_metanet.blocks.base import ElementBase, ElementWithVars
-from sym_metanet.blocks.destinations import Destination
+from sym_metanet.blocks.destinations import Destination, OffRamp
 from sym_metanet.blocks.links import Link
 from sym_metanet.blocks.nodes import Node
 from sym_metanet.blocks.origins import MeteredOnRamp, Origin
@@ -419,7 +419,7 @@ class Network(ElementBase):
 
              8) a node with a destination has multiple entering links
 
-             9) a node with a destination has also exiting links.
+             9) a node with a destination that is not an off-ramp has exiting links.
         """
         msgs = []
 
@@ -492,14 +492,15 @@ class Network(ElementBase):
             if len(self.in_links(node)) > 1:
                 msgs.append(
                     f"Expected node {node.name} to have at most one entering "
-                    "link, as it is connected to destination " + destination.name + "."
+                    f"link, as it is connected to destination {destination.name}."
                 )
                 if raises:
                     raise InvalidNetworkError(msgs[-1])
-            if any(self.out_links(node)):
+            if not isinstance(destination, OffRamp) and any(self.out_links(node)):
                 msgs.append(
-                    f"Expected node {node.name} to have no exiting links, as "
-                    f"it is connected to destination {destination.name}."
+                    f"Expected node {node.name} to have no exiting links, as it is "
+                    f"connected to destination {destination.name} (only off-ramps "
+                    "support exiting links)."
                 )
                 if raises:
                     raise InvalidNetworkError(msgs[-1])

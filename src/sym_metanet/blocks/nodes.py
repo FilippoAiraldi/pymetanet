@@ -1,4 +1,3 @@
-from collections.abc import Collection
 from typing import TYPE_CHECKING, Optional
 
 from sym_metanet.blocks.base import ElementBase
@@ -40,26 +39,37 @@ class Node(ElementBase):
         symbolic variable
             Returns the (virtual) downstream density.
         """
+        # the node can have 0 or more exiting links, as well as a destination. If the
+        # destination is final (i.e., there are no exiting links), then the downstream
+        # density is dictated only by the destination. Otherwise, the destination must
+        # be an off-ramp, which is regarded as an additional link, and the downstream
+        # density is computed via the densities of the exiting links and the off-ramp.
         if engine is None:
             engine = get_current_engine()
 
-        # following the link entering this node, this node can only be a
-        # destination or have multiple exiting links
-        if self in net.destinations_by_node:
-            return net.destinations_by_node[self].get_density(
-                net, engine=engine, **kwargs
-            )
+        # first, grab the density of the destination, if any
+        density_dest = (
+            net.destinations_by_node[self].get_density(net, engine=engine, **kwargs)
+            if self in net.destinations_by_node
+            else None
+        )
 
-        # if no destination, then there must be 1 or more exiting links
-        links_down: Collection[tuple["Node", "Node", "Link[Variable]"]] = net.out_links(
-            self
-        )
-        if len(links_down) == 1:
+        # then, process the exiting links
+        links_down = net.out_links(self)
+        n_down = len(links_down)
+        if n_down == 0:
+            # no exiting link, only a destination (which must be final)
+            assert density_dest is not None, "No exiting links or destination!"
+            return density_dest
+        elif n_down == 1 and density_dest is None:
+            # if only one exiting link and no destination, simply return link's density
             return first(links_down)[-1].states["rho"][0]
-        rho_firsts = engine.vcat(
-            *(dlink.states["rho"][0] for _, _, dlink in links_down)
-        )
-        return engine.nodes.get_downstream_density(rho_firsts)
+        else:
+            # 1 or more exiting links and a destination, so combine their densities
+            rho_firsts = [dlink.states["rho"][0] for _, _, dlink in links_down]
+            if density_dest is not None:
+                rho_firsts.append(density_dest)
+            return engine.nodes.get_downstream_density(engine.vcat(*rho_firsts))
 
     def get_upstream_speed_and_flow(
         self,
@@ -86,47 +96,62 @@ class Node(ElementBase):
         tuple[symbolic variable, symbolic variable]
             Returns the (virtual) upstream speed and flow.
         """
+        # the node can have 0 or more entering links, as well as a ramp origin and a
+        # destination. Speed is dictated by the entering links, if any; otherwise by the
+        # origin (same as first segment). Flow is dictated both by entering
+        # links, origin, and destination.
         if engine is None:
             engine = get_current_engine()
 
-        # the node can have 1 or more entering links, as well as a ramp origin.
-        # Speed is dictated by the entering links, if any; otherwise by the
-        # origin (same as first segment). Flow is dictated both by entering
-        # links and origin.
-        links_up: Collection[tuple["Node", "Node", "Link[VarType]"]] = net.in_links(
-            self
-        )
-        n_up = len(links_up)
-        if self in net.origins_by_node:
-            origin = net.origins_by_node[self]  # type: ignore[index]
+        # first of all, grab speed and flow of entering links and origin, if any - in a
+        # valid network, every node must have at least an entering link or an origin
+        links_up = net.in_links(self)
+        origin = net.origins_by_node.get(self, None)
+        assert links_up or origin is not None, "No entering links or origin!"
+        v_up = []
+        q_up = []
+        for _, _, link_up in links_up:
+            v_up.append(link_up.states["v"][-1])
+            q_up.append(link_up.get_flow(engine)[-1])
+        if origin is not None:
             v_o = origin.get_speed(net, engine=engine, **kwargs)
             q_o = origin.get_flow(net, engine=engine, **kwargs)
         else:
-            v_o = None
-            q_o = None
+            v_o = q_o = 0
 
+        # then, compute the upstream speed and adjust q_up accordingly
+        n_up = len(links_up)
         if n_up == 0:
             v = v_o
-            q = q_o
+            q_up, q_o = q_o, 0  # swap origin's flow with link's, and set origin's to 0
         elif n_up == 1:
-            link_up = next(iter(links_up))[-1]
-            v = link_up.states["v"][-1]
-            q = link_up.get_flow(engine)[-1]
-            if q_o is not None:
-                q += q_o  # type: ignore[assignment,operator]
+            v = v_up[0]
+            q_up = q_up[0]
         else:
-            v_last = []
-            q_last = []
-            for _, _, link_up in links_up:
-                v_last.append(link_up.states["v"][-1])
-                q_last.append(link_up.get_flow(engine)[-1])
-            v_last = engine.vcat(*v_last)
-            q_last = engine.vcat(*q_last)
-            links_down: Collection[
-                tuple["Node", "Node", "Link[VarType]"]
-            ] = net.out_links(self)
-            betas = engine.vcat(*(dlink.turnrate for _, _, dlink in links_down))
+            q_up = engine.vcat(*q_up)
+            v_up = engine.vcat(*v_up)
+            v = engine.nodes.get_upstream_speed(q_up, v_up)
 
-            v = engine.nodes.get_upstream_speed(q_last, v_last)
-            q = engine.nodes.get_upstream_flow(q_last, link.turnrate, betas, q_o)
-        return v, q  # type: ignore[return-value]
+        # finally, compute the upstream flow - in a valid network, every node must have
+        # at least an exiting link or a destination, or both iff the destination is an
+        # off-ramp (i.e., it has a `get_flow` method)
+        links_down = net.out_links(self)
+        assert any(
+            link is link_down for _, _, link_down in links_down
+        ), "Link not contained in entering links!"
+        betas = engine.vcat(*(link_down.turnrate for _, _, link_down in links_down))
+        if self in net.destinations_by_node:
+            destination = net.destinations_by_node[self]
+            assert hasattr(destination, "get_flow"), "Destination is not an off-ramp!"
+            q_d = destination.get_flow(
+                net,
+                engine=engine,
+                q_up=q_up,
+                q_orig=q_o,
+                betas_down=betas,
+                **kwargs,
+            )
+        else:
+            q_d = None
+        q = engine.nodes.get_upstream_flow(q_up, link.turnrate, betas, q_o, q_d)
+        return v, q
